@@ -115,11 +115,6 @@
             background: #f0fdf4;
         }
 
-        .lookup-section.needs-update {
-            border-color: #fbbf24;
-            background: #fffbeb;
-        }
-
         .lookup-header {
             display: flex;
             justify-content: space-between;
@@ -151,12 +146,6 @@
 
         .lookup-status .last-updated strong {
             color: #374151;
-        }
-
-        .lookup-status .record-count {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #059669;
         }
 
         .lookup-status .no-data {
@@ -732,9 +721,10 @@
         <div class="instructions">
             <h3>How it works</h3>
             <ul>
-                <li>Upload a lookup file (Block Academy Active Worker Data) to resolve emails to usernames</li>
-                <li>Paste input data from Excel or Google Sheets — with usernames or emails</li>
-                <li>5-digit usernames are padded with a leading zero to become 6 digits</li>
+                <li>Upload a lookup file (Active Worker Data) to resolve emails or full names to usernames</li>
+                <li>Paste input data from Excel or Google Sheets — with usernames, emails, or full names</li>
+                <li>The tool matches by <strong>email address</strong> or <strong>full name</strong> to find the employee ID</li>
+                <li>Usernames are padded to 6 digits with leading zeros as needed</li>
                 <li>Output CSV contains only <strong>Username</strong> and <strong>Level</strong> (always "Learner")</li>
             </ul>
         </div>
@@ -743,8 +733,8 @@
         <div class="lookup-section" id="lookupSection">
             <div class="lookup-header">
                 <div class="lookup-header-left">
-                    <h2>📁 Lookup File (Email → Username)</h2>
-                    <p>Upload the Active Worker Data from Block Academy to enable email-to-username resolution</p>
+                    <h2>📁 Lookup File (Active Worker Data)</h2>
+                    <p>Upload the Active Worker Data CSV to enable email or full name → username resolution</p>
                 </div>
                 <div class="lookup-status" id="lookupStatus">
                     <div class="last-updated" id="lastUpdatedDisplay" style="display:none;">
@@ -764,10 +754,10 @@
                     </svg>
                 </div>
                 <h3>Upload Lookup File</h3>
-                <p>Drag & drop a CSV/TSV file here, or click to browse</p>
+                <p>Drag & drop the Active Worker Data CSV here, or click to browse</p>
                 <div class="file-input-wrapper">
                     <label class="browse-btn" for="lookupFileInput">Browse Files</label>
-                    <input type="file" id="lookupFileInput" accept=".csv,.tsv,.txt,.xlsx" onchange="handleLookupFile(event)">
+                    <input type="file" id="lookupFileInput" accept=".csv,.tsv,.txt" onchange="handleLookupFile(event)">
                 </div>
                 <span class="or-text">or paste data below</span>
                 <span class="paste-hint">Click "Paste Data Instead" to paste directly from a spreadsheet</span>
@@ -779,8 +769,8 @@
             </div>
 
             <div class="lookup-paste-area" id="lookupPasteArea">
-                <label for="lookupTextArea">Paste lookup data (Username + Email columns):</label>
-                <textarea id="lookupTextArea" class="lookup-area" placeholder="Paste lookup data here...&#10;&#10;Example:&#10;Username&#9;Email&#9;On Leave&#10;108&#9;jack@squareup.com&#9;0&#10;134&#9;brian@squareup.com&#9;0"></textarea>
+                <label for="lookupTextArea">Paste lookup data (Username, Email, Full Name columns):</label>
+                <textarea id="lookupTextArea" class="lookup-area" placeholder="Paste lookup data here...&#10;&#10;Example:&#10;Username&#9;Email&#9;Full Name&#9;On Leave&#10;000108&#9;jack@squareup.com&#9;Jack Dorsey&#9;0&#10;000134&#9;brian@squareup.com&#9;Brian Grassadonia&#9;0"></textarea>
                 <div class="lookup-actions">
                     <button class="btn-sm btn-sm-primary" onclick="loadPastedLookup()">Load Lookup Data</button>
                     <button class="btn-sm btn-sm-ghost" onclick="togglePasteArea()">Cancel</button>
@@ -811,7 +801,7 @@
                 <span class="badge">Required</span>
             </div>
             <label for="pasteArea">Paste your spreadsheet data below:</label>
-            <textarea id="pasteArea" placeholder="Paste your data here...&#10;&#10;Example (with usernames):&#10;Username&#9;Email&#9;Level&#10;12345&#9;jdoe@block.xyz&#9;Learner&#10;123456&#9;jane@block.xyz&#9;Learner&#10;&#10;Example (emails only - requires lookup file above):&#10;Email&#10;jdoe@block.xyz&#10;jane@block.xyz&#10;&#10;Header/metadata rows will be automatically skipped."></textarea>
+            <textarea id="pasteArea" placeholder="Paste your data here...&#10;&#10;Example (with usernames):&#10;Username&#9;Email&#9;Level&#10;12345&#9;jdoe@block.xyz&#9;Learner&#10;&#10;Example (with emails):&#10;Email&#10;jdoe@block.xyz&#10;jane@block.xyz&#10;&#10;Example (with full names):&#10;Full Name&#10;Jack Dorsey&#10;Brian Grassadonia&#10;&#10;Header/metadata rows will be automatically skipped."></textarea>
         </div>
 
         <div class="button-row">
@@ -864,7 +854,8 @@
     <script>
         let csvContent = '';
         let processedData = [];
-        let lookupMap = {}; // email -> username
+        let emailToUsername = {}; // email -> username
+        let nameToUsername = {};  // full name (lowercase) -> username
         let lookupLoaded = false;
 
         // On page load, check localStorage for saved lookup data
@@ -873,20 +864,22 @@
         });
 
         function loadSavedLookup() {
-            const savedData = localStorage.getItem('csvTool_lookupData');
+            const savedEmailMap = localStorage.getItem('csvTool_emailMap');
+            const savedNameMap = localStorage.getItem('csvTool_nameMap');
             const savedDate = localStorage.getItem('csvTool_lookupDate');
             const savedCount = localStorage.getItem('csvTool_lookupCount');
 
-            if (savedData && savedDate) {
-                lookupMap = JSON.parse(savedData);
+            if (savedEmailMap && savedNameMap && savedDate) {
+                emailToUsername = JSON.parse(savedEmailMap);
+                nameToUsername = JSON.parse(savedNameMap);
                 lookupLoaded = true;
-                const count = parseInt(savedCount) || Object.keys(lookupMap).length;
+                const count = parseInt(savedCount) || Object.keys(emailToUsername).length;
                 showLookupLoaded(count, savedDate);
             }
         }
 
         function saveLookupToStorage() {
-            const count = Object.keys(lookupMap).length;
+            const count = Object.keys(emailToUsername).length;
             const now = new Date().toLocaleString('en-US', {
                 year: 'numeric',
                 month: 'short',
@@ -896,7 +889,8 @@
                 hour12: true
             });
 
-            localStorage.setItem('csvTool_lookupData', JSON.stringify(lookupMap));
+            localStorage.setItem('csvTool_emailMap', JSON.stringify(emailToUsername));
+            localStorage.setItem('csvTool_nameMap', JSON.stringify(nameToUsername));
             localStorage.setItem('csvTool_lookupDate', now);
             localStorage.setItem('csvTool_lookupCount', count.toString());
 
@@ -904,22 +898,16 @@
         }
 
         function showLookupLoaded(count, dateStr) {
-            // Update status area
             document.getElementById('lastUpdatedDisplay').style.display = 'block';
             document.getElementById('lastUpdatedDate').textContent = dateStr;
             document.getElementById('noDataLabel').style.display = 'none';
 
-            // Show loaded info bar
             const loadedInfo = document.getElementById('lookupLoadedInfo');
             loadedInfo.classList.add('show');
             document.getElementById('loadedCountText').textContent = `${count.toLocaleString()} records loaded`;
             document.getElementById('loadedDateText').textContent = `Last uploaded: ${dateStr}`;
 
-            // Update section styling
             document.getElementById('lookupSection').classList.add('has-data');
-            document.getElementById('lookupSection').classList.remove('needs-update');
-
-            // Hide prompt
             document.getElementById('lookupPrompt').style.display = 'none';
             document.getElementById('pasteToggleBtn').style.display = 'none';
             document.getElementById('lookupPasteArea').classList.remove('show');
@@ -928,7 +916,6 @@
         }
 
         function resetLookup() {
-            // Show the upload prompt again
             document.getElementById('lookupPrompt').style.display = '';
             document.getElementById('pasteToggleBtn').style.display = '';
             document.getElementById('lookupLoadedInfo').classList.remove('show');
@@ -972,7 +959,7 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 parseLookupData(e.target.result);
-                if (Object.keys(lookupMap).length > 0) {
+                if (Object.keys(emailToUsername).length > 0) {
                     saveLookupToStorage();
                 }
             };
@@ -984,73 +971,102 @@
             if (!text) return;
 
             parseLookupData(text);
-            if (Object.keys(lookupMap).length > 0) {
+            if (Object.keys(emailToUsername).length > 0) {
                 saveLookupToStorage();
             }
         }
 
         function parseLookupData(text) {
-            lookupMap = {};
+            emailToUsername = {};
+            nameToUsername = {};
             const lines = text.split(/\r?\n/);
             let emailColIndex = -1;
             let usernameColIndex = -1;
+            let nameColIndex = -1;
             let headerFound = false;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                const columns = parseLine(line);
+                const columns = parseCSVLine(line);
 
                 // Try to find header row
                 if (!headerFound) {
                     for (let j = 0; j < columns.length; j++) {
-                        const col = columns[j].trim().toLowerCase();
+                        const col = columns[j].trim().toLowerCase().replace(/"/g, '');
                         if (col === 'email' || col === 'email address') {
                             emailColIndex = j;
                         }
                         if (col === 'username' || col === 'employee id' || col === 'user id' || col === 'id') {
                             usernameColIndex = j;
                         }
+                        if (col === 'full name' || col === 'name' || col === 'employee name' || col === 'worker name') {
+                            nameColIndex = j;
+                        }
                     }
-                    if (emailColIndex !== -1 && usernameColIndex !== -1) {
+                    if (usernameColIndex !== -1 && (emailColIndex !== -1 || nameColIndex !== -1)) {
                         headerFound = true;
                         continue;
                     }
-                    // If first row looks like data (has an email pattern)
-                    if (!headerFound && columns.length >= 2) {
-                        for (let j = 0; j < columns.length; j++) {
-                            if (columns[j].includes('@')) {
-                                emailColIndex = j;
-                            }
-                            if (/^\d+$/.test(columns[j].trim())) {
-                                usernameColIndex = j;
-                            }
-                        }
-                        if (emailColIndex !== -1 && usernameColIndex !== -1) {
-                            headerFound = true;
-                            // Process this row too (it's data, not header)
-                            const email = columns[emailColIndex].trim().toLowerCase();
-                            const username = columns[usernameColIndex].trim();
-                            if (email.includes('@') && /^\d+$/.test(username)) {
-                                lookupMap[email] = username;
-                            }
-                            continue;
-                        }
-                    }
+                    // Reset if we didn't find a valid header
+                    emailColIndex = -1;
+                    usernameColIndex = -1;
+                    nameColIndex = -1;
                     continue;
                 }
 
-                if (headerFound && emailColIndex !== -1 && usernameColIndex !== -1) {
-                    if (columns.length > Math.max(emailColIndex, usernameColIndex)) {
-                        const email = columns[emailColIndex].trim().toLowerCase();
-                        const username = columns[usernameColIndex].trim();
-                        if (email && email.includes('@') && /^\d+$/.test(username)) {
-                            lookupMap[email] = username;
+                if (headerFound) {
+                    const maxIndex = Math.max(usernameColIndex, emailColIndex, nameColIndex);
+                    if (columns.length > maxIndex) {
+                        const username = columns[usernameColIndex].trim().replace(/"/g, '');
+
+                        if (username && /^\d+$/.test(username)) {
+                            // Map email to username
+                            if (emailColIndex !== -1) {
+                                const email = columns[emailColIndex].trim().toLowerCase().replace(/"/g, '');
+                                if (email && email.includes('@')) {
+                                    emailToUsername[email] = username;
+                                }
+                            }
+
+                            // Map full name to username
+                            if (nameColIndex !== -1) {
+                                const name = columns[nameColIndex].trim().replace(/"/g, '');
+                                if (name && name.length > 1) {
+                                    nameToUsername[name.toLowerCase()] = username;
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+
+        function lookupUsername(value) {
+            // Try email match first
+            const emailLower = value.trim().toLowerCase();
+            if (emailToUsername[emailLower]) {
+                return { username: emailToUsername[emailLower], method: 'email' };
+            }
+
+            // Try full name match (case-insensitive)
+            const nameLower = value.trim().toLowerCase();
+            if (nameToUsername[nameLower]) {
+                return { username: nameToUsername[nameLower], method: 'name' };
+            }
+
+            // Try partial name match (last name, first name format)
+            // Convert "Last, First" to "First Last"
+            if (nameLower.includes(',')) {
+                const parts = nameLower.split(',').map(p => p.trim());
+                const flipped = parts[1] + ' ' + parts[0];
+                if (nameToUsername[flipped]) {
+                    return { username: nameToUsername[flipped], method: 'name' };
+                }
+            }
+
+            return null;
         }
 
         function convertData() {
@@ -1071,12 +1087,13 @@
                 return;
             }
 
-            const lookupAvailable = Object.keys(lookupMap).length > 0;
+            const lookupAvailable = Object.keys(emailToUsername).length > 0 || Object.keys(nameToUsername).length > 0;
 
             const lines = input.split(/\r?\n/);
             let results = [];
             let usernameColIndex = -1;
             let emailColIndex = -1;
+            let nameColIndex = -1;
             let headerFound = false;
             let dataStartIndex = 0;
 
@@ -1089,13 +1106,17 @@
                 let foundHeader = false;
 
                 for (let j = 0; j < columns.length; j++) {
-                    const col = columns[j].trim().toLowerCase();
-                    if (col === 'username') {
+                    const col = columns[j].trim().toLowerCase().replace(/"/g, '');
+                    if (col === 'username' || col === 'employee id' || col === 'user id') {
                         usernameColIndex = j;
                         foundHeader = true;
                     }
                     if (col === 'email' || col === 'email address') {
                         emailColIndex = j;
+                        foundHeader = true;
+                    }
+                    if (col === 'full name' || col === 'name' || col === 'employee name' || col === 'worker name' || col === 'learner name') {
+                        nameColIndex = j;
                         foundHeader = true;
                     }
                 }
@@ -1108,7 +1129,7 @@
             }
 
             // Process data rows
-            let notFoundEmails = [];
+            let notFoundItems = [];
 
             if (headerFound) {
                 for (let i = dataStartIndex; i < lines.length; i++) {
@@ -1118,11 +1139,12 @@
 
                     let username = null;
                     let email = null;
+                    let name = null;
                     let source = 'direct';
 
                     // Try to get username directly
                     if (usernameColIndex !== -1 && columns.length > usernameColIndex) {
-                        const val = columns[usernameColIndex].trim();
+                        const val = columns[usernameColIndex].trim().replace(/"/g, '');
                         if (/^\d{1,6}$/.test(val)) {
                             username = val;
                         }
@@ -1130,28 +1152,43 @@
 
                     // Get email
                     if (emailColIndex !== -1 && columns.length > emailColIndex) {
-                        email = columns[emailColIndex].trim().toLowerCase();
+                        email = columns[emailColIndex].trim().toLowerCase().replace(/"/g, '');
                     }
 
-                    // If no username but have email, try lookup
-                    if (!username && email && lookupAvailable) {
-                        if (lookupMap[email]) {
-                            username = lookupMap[email];
+                    // Get full name
+                    if (nameColIndex !== -1 && columns.length > nameColIndex) {
+                        name = columns[nameColIndex].trim().replace(/"/g, '');
+                    }
+
+                    // If no username, try lookup by email first, then name
+                    if (!username && lookupAvailable) {
+                        let lookupResult = null;
+
+                        if (email) {
+                            lookupResult = lookupUsername(email);
+                        }
+
+                        if (!lookupResult && name) {
+                            lookupResult = lookupUsername(name);
+                        }
+
+                        if (lookupResult) {
+                            username = lookupResult.username;
                             source = 'lookup';
-                        } else {
+                        } else if (email || name) {
                             source = 'not_found';
-                            notFoundEmails.push(email);
+                            notFoundItems.push(email || name);
                         }
                     }
 
                     if (username) {
-                        results.push({ username, source, email });
-                    } else if (email && source === 'not_found') {
-                        results.push({ username: null, source: 'not_found', email });
+                        results.push({ username, source, email, name });
+                    } else if (source === 'not_found') {
+                        results.push({ username: null, source: 'not_found', email, name });
                     }
                 }
             } else {
-                // No header found - try to detect data
+                // No header found - try to detect data line by line
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
@@ -1159,10 +1196,11 @@
 
                     let username = null;
                     let email = null;
+                    let name = null;
                     let source = 'direct';
 
                     for (let j = 0; j < columns.length; j++) {
-                        const val = columns[j].trim();
+                        const val = columns[j].trim().replace(/"/g, '');
                         if (/^\d{1,6}$/.test(val) && !username) {
                             username = val;
                         }
@@ -1171,36 +1209,54 @@
                         }
                     }
 
-                    // If no username but have email, try lookup
-                    if (!username && email && lookupAvailable) {
-                        if (lookupMap[email]) {
-                            username = lookupMap[email];
-                            source = 'lookup';
-                        } else {
-                            source = 'not_found';
-                            notFoundEmails.push(email);
-                        }
-                    }
-
-                    // Also handle case where entire line is just an email
-                    if (!username && !email) {
-                        const trimmed = line.trim().toLowerCase();
-                        if (trimmed.includes('@') && lookupAvailable) {
-                            email = trimmed;
-                            if (lookupMap[email]) {
-                                username = lookupMap[email];
-                                source = 'lookup';
-                            } else {
-                                source = 'not_found';
-                                notFoundEmails.push(email);
+                    // If no username and no email, treat the whole line as a potential name
+                    if (!username && !email && lookupAvailable) {
+                        const potentialName = line.trim().replace(/"/g, '');
+                        // Check if it looks like a name (has letters, possibly spaces)
+                        if (/^[a-zA-Z\s\-',.]+$/.test(potentialName) && potentialName.includes(' ')) {
+                            name = potentialName;
+                        } else if (columns.length >= 1) {
+                            // Try each column as a potential name
+                            for (let j = 0; j < columns.length; j++) {
+                                const val = columns[j].trim().replace(/"/g, '');
+                                if (/^[a-zA-Z\s\-',.]+$/.test(val) && val.includes(' ')) {
+                                    name = val;
+                                    break;
+                                }
                             }
                         }
                     }
 
+                    // Try lookup
+                    if (!username && lookupAvailable) {
+                        let lookupResult = null;
+
+                        if (email) {
+                            lookupResult = lookupUsername(email);
+                        }
+
+                        if (!lookupResult && name) {
+                            lookupResult = lookupUsername(name);
+                        }
+
+                        // Also try the whole line as a lookup value
+                        if (!lookupResult && !email && !name) {
+                            lookupResult = lookupUsername(line.trim());
+                        }
+
+                        if (lookupResult) {
+                            username = lookupResult.username;
+                            source = 'lookup';
+                        } else if (email || name) {
+                            source = 'not_found';
+                            notFoundItems.push(email || name);
+                        }
+                    }
+
                     if (username) {
-                        results.push({ username, source, email });
-                    } else if (email && source === 'not_found') {
-                        results.push({ username: null, source: 'not_found', email });
+                        results.push({ username, source, email, name });
+                    } else if (source === 'not_found') {
+                        results.push({ username: null, source: 'not_found', email, name });
                     }
                 }
             }
@@ -1209,10 +1265,10 @@
             const validResults = results.filter(r => r.username !== null);
 
             if (validResults.length === 0) {
-                if (!lookupAvailable && results.some(r => r.source === 'not_found')) {
-                    showError('Your input contains emails but no lookup file is loaded. Please upload a lookup file first.');
+                if (!lookupAvailable) {
+                    showError('Your input contains emails/names but no lookup file is loaded. Please upload a lookup file first.');
                 } else {
-                    showError('No valid usernames found. Please make sure your data contains username or email columns.');
+                    showError('No valid usernames found. Please make sure your data contains username, email, or full name columns.');
                 }
                 return;
             }
@@ -1234,7 +1290,7 @@
                 if (padded) zeroPaddedCount++;
                 if (item.source === 'lookup') lookedUpCount++;
 
-                return { username, padded, source: item.source, email: item.email };
+                return { username, padded, source: item.source, email: item.email, name: item.name };
             });
 
             // Generate CSV - only column headers and data, nothing else
@@ -1243,12 +1299,12 @@
                 csvContent += '\n' + item.username + ',Learner';
             });
 
-            // Show warning for not-found emails
-            if (notFoundEmails.length > 0) {
+            // Show warning for not-found items
+            if (notFoundItems.length > 0) {
                 const warnMsg = document.getElementById('warningMsg');
-                warnMsg.innerHTML = `<strong>⚠ ${notFoundEmails.length} email(s) not found in lookup:</strong><br>` +
-                    notFoundEmails.slice(0, 10).join(', ') +
-                    (notFoundEmails.length > 10 ? `... and ${notFoundEmails.length - 10} more` : '');
+                warnMsg.innerHTML = `<strong>⚠ ${notFoundItems.length} item(s) not found in lookup:</strong><br>` +
+                    notFoundItems.slice(0, 10).join(', ') +
+                    (notFoundItems.length > 10 ? `... and ${notFoundItems.length - 10} more` : '');
                 warnMsg.classList.add('show');
             }
 
@@ -1274,10 +1330,10 @@
                 `;
             }
 
-            if (notFoundEmails.length > 0) {
+            if (notFoundItems.length > 0) {
                 statsHTML += `
                     <div class="stat-card error">
-                        <div class="stat-value">${notFoundEmails.length}</div>
+                        <div class="stat-value">${notFoundItems.length}</div>
                         <div class="stat-label">Not Found</div>
                     </div>
                 `;
@@ -1318,8 +1374,9 @@
             notFoundResults.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.classList.add('not-found');
+                const displayVal = item.email || item.name || '—';
                 tr.innerHTML = `
-                    <td style="color:#dc2626;">${item.email} <span class="notfound-badge">NOT FOUND</span></td>
+                    <td style="color:#dc2626;">${displayVal} <span class="notfound-badge">NOT FOUND</span></td>
                     <td style="color:#dc2626;">—</td>
                 `;
                 previewBody.appendChild(tr);
@@ -1337,15 +1394,15 @@
                 legendHTML += `
                     <div class="legend-item">
                         <span class="legend-swatch green"></span>
-                        <span>Resolved via email lookup</span>
+                        <span>Resolved via email/name lookup</span>
                     </div>
                 `;
             }
-            if (notFoundEmails.length > 0) {
+            if (notFoundItems.length > 0) {
                 legendHTML += `
                     <div class="legend-item">
                         <span class="legend-swatch red"></span>
-                        <span>Email not found in lookup</span>
+                        <span>Not found in lookup</span>
                     </div>
                 `;
             }
