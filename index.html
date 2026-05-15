@@ -874,8 +874,9 @@
     <script>
         let csvContent = '';
         let processedData = [];
-        let emailToUsername = {}; // email -> username
-        let nameToUsername = {};  // full name (lowercase) -> username
+        let emailToUsername = {};      // email -> username
+        let emailPrefixToUsername = {}; // email prefix (before @) -> username
+        let nameToUsername = {};       // full name (lowercase) -> username
         let lookupLoaded = false;
         let notFoundList = [];   // items not found in lookup
         let notFoundHeader = ''; // original header row for not-found export
@@ -887,12 +888,14 @@
 
         function loadSavedLookup() {
             const savedEmailMap = localStorage.getItem('csvTool_emailMap');
+            const savedPrefixMap = localStorage.getItem('csvTool_prefixMap');
             const savedNameMap = localStorage.getItem('csvTool_nameMap');
             const savedDate = localStorage.getItem('csvTool_lookupDate');
             const savedCount = localStorage.getItem('csvTool_lookupCount');
 
             if (savedEmailMap && savedNameMap && savedDate) {
                 emailToUsername = JSON.parse(savedEmailMap);
+                emailPrefixToUsername = savedPrefixMap ? JSON.parse(savedPrefixMap) : {};
                 nameToUsername = JSON.parse(savedNameMap);
                 lookupLoaded = true;
                 const count = parseInt(savedCount) || Object.keys(emailToUsername).length;
@@ -912,6 +915,7 @@
             });
 
             localStorage.setItem('csvTool_emailMap', JSON.stringify(emailToUsername));
+            localStorage.setItem('csvTool_prefixMap', JSON.stringify(emailPrefixToUsername));
             localStorage.setItem('csvTool_nameMap', JSON.stringify(nameToUsername));
             localStorage.setItem('csvTool_lookupDate', now);
             localStorage.setItem('csvTool_lookupCount', count.toString());
@@ -1000,6 +1004,7 @@
 
         function parseLookupData(text) {
             emailToUsername = {};
+            emailPrefixToUsername = {};
             nameToUsername = {};
             const lines = text.split(/\r?\n/);
             let emailColIndex = -1;
@@ -1044,11 +1049,15 @@
                         const username = columns[usernameColIndex].trim().replace(/"/g, '');
 
                         if (username && /^\d+$/.test(username)) {
-                            // Map email to username
+                            // Map email to username (full email and prefix)
                             if (emailColIndex !== -1) {
                                 const email = columns[emailColIndex].trim().toLowerCase().replace(/"/g, '');
                                 if (email && email.includes('@')) {
                                     emailToUsername[email] = username;
+                                    const prefix = email.split('@')[0];
+                                    if (prefix) {
+                                        emailPrefixToUsername[prefix] = username;
+                                    }
                                 }
                             }
 
@@ -1066,10 +1075,19 @@
         }
 
         function lookupUsername(value) {
-            // Try email match first
+            // Try exact email match first
             const emailLower = value.trim().toLowerCase();
             if (emailToUsername[emailLower]) {
                 return { username: emailToUsername[emailLower], method: 'email' };
+            }
+
+            // Try matching by email prefix (part before @)
+            // This handles cases where input has @block.xyz but lookup has @squareup.com
+            if (emailLower.includes('@')) {
+                const inputPrefix = emailLower.split('@')[0];
+                if (inputPrefix && emailPrefixToUsername[inputPrefix]) {
+                    return { username: emailPrefixToUsername[inputPrefix], method: 'email' };
+                }
             }
 
             // Try full name match (case-insensitive)
