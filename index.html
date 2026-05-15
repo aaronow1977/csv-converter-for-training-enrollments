@@ -1134,6 +1134,8 @@
             let usernameColIndex = -1;
             let emailColIndex = -1;
             let nameColIndex = -1;
+            let firstNameColIndex = -1;
+            let lastNameColIndex = -1;
             let headerFound = false;
             let dataStartIndex = 0;
 
@@ -1147,7 +1149,7 @@
 
                 for (let j = 0; j < columns.length; j++) {
                     const col = columns[j].trim().toLowerCase().replace(/"/g, '');
-                    if (col === 'username' || col === 'employee id' || col === 'user id') {
+                    if (col === 'username' || col === 'employee id' || col === 'user id' || col === 'id') {
                         usernameColIndex = j;
                         foundHeader = true;
                     }
@@ -1157,6 +1159,14 @@
                     }
                     if (col === 'full name' || col === 'name' || col === 'employee name' || col === 'worker name' || col === 'learner name') {
                         nameColIndex = j;
+                        foundHeader = true;
+                    }
+                    if (col === 'first' || col === 'first name' || col === 'firstname') {
+                        firstNameColIndex = j;
+                        foundHeader = true;
+                    }
+                    if (col === 'last' || col === 'last name' || col === 'lastname' || col === 'surname') {
+                        lastNameColIndex = j;
                         foundHeader = true;
                     }
                 }
@@ -1202,9 +1212,20 @@
                         email = columns[emailColIndex].trim().toLowerCase().replace(/"/g, '');
                     }
 
-                    // Get full name
+                    // Get full name (from single column or combined First + Last)
                     if (nameColIndex !== -1 && columns.length > nameColIndex) {
                         name = columns[nameColIndex].trim().replace(/"/g, '');
+                    }
+                    if (!name && firstNameColIndex !== -1 && lastNameColIndex !== -1) {
+                        const firstName = (columns[firstNameColIndex] || '').trim().replace(/"/g, '');
+                        const lastName = (columns[lastNameColIndex] || '').trim().replace(/"/g, '');
+                        if (firstName && lastName) {
+                            name = firstName + ' ' + lastName;
+                        } else if (firstName) {
+                            name = firstName;
+                        } else if (lastName) {
+                            name = lastName;
+                        }
                     }
 
                     // If no username, try lookup by email first, then name
