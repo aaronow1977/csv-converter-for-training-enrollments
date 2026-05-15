@@ -878,6 +878,7 @@
         let nameToUsername = {};  // full name (lowercase) -> username
         let lookupLoaded = false;
         let notFoundList = [];   // items not found in lookup
+        let notFoundHeader = ''; // original header row for not-found export
 
         // On page load, check localStorage for saved lookup data
         window.addEventListener('DOMContentLoaded', function() {
@@ -1149,6 +1150,12 @@
                 }
             }
 
+            // Capture input header row for not-found export
+            let inputHeaderRow = '';
+            if (headerFound && dataStartIndex > 0) {
+                inputHeaderRow = lines[dataStartIndex - 1].trim();
+            }
+
             // Process data rows
             let notFoundItems = [];
 
@@ -1157,6 +1164,7 @@
                     const line = lines[i].trim();
                     if (!line) continue;
                     const columns = parseLine(line);
+                    const rawLine = line;
 
                     let username = null;
                     let email = null;
@@ -1198,7 +1206,7 @@
                             source = 'lookup';
                         } else if (email || name) {
                             source = 'not_found';
-                            notFoundItems.push(email || name);
+                            notFoundItems.push({ display: email || name, rawLine: rawLine });
                         }
                     }
 
@@ -1214,6 +1222,7 @@
                     const line = lines[i].trim();
                     if (!line) continue;
                     const columns = parseLine(line);
+                    const rawLine = line;
 
                     let username = null;
                     let email = null;
@@ -1270,7 +1279,7 @@
                             source = 'lookup';
                         } else if (email || name) {
                             source = 'not_found';
-                            notFoundItems.push(email || name);
+                            notFoundItems.push({ display: email || name, rawLine: rawLine });
                         }
                     }
 
@@ -1322,11 +1331,13 @@
 
             // Show warning for not-found items
             notFoundList = notFoundItems;
+            notFoundHeader = inputHeaderRow;
             if (notFoundItems.length > 0) {
+                const displayItems = notFoundItems.map(item => item.display);
                 const warnMsg = document.getElementById('warningMsg');
                 warnMsg.innerHTML = `<strong>⚠ ${notFoundItems.length} item(s) not found in lookup:</strong><br>` +
-                    notFoundItems.slice(0, 10).join(', ') +
-                    (notFoundItems.length > 10 ? `... and ${notFoundItems.length - 10} more` : '') +
+                    displayItems.slice(0, 10).join(', ') +
+                    (displayItems.length > 10 ? `... and ${displayItems.length - 10} more` : '') +
                     `<br><br><button class="btn btn-notfound" onclick="downloadNotFound()">` +
                     `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v9M4 8l4 4 4-4M2 13h12"/></svg> ` +
                     `Download Not Found List (${notFoundItems.length})</button>`;
@@ -1472,10 +1483,29 @@
         function downloadNotFound() {
             if (!notFoundList || notFoundList.length === 0) return;
 
-            let notFoundContent = 'Not Found';
+            let notFoundContent = '';
+
+            // Include the original header row if available
+            if (notFoundHeader) {
+                // Convert tabs to commas for CSV format
+                const headerCols = parseLine(notFoundHeader).map(col => {
+                    const clean = col.trim().replace(/"/g, '');
+                    return '"' + clean + '"';
+                });
+                notFoundContent = headerCols.join(',');
+            }
+
+            // Include full original data for each not-found row
             notFoundList.forEach(item => {
-                notFoundContent += '\n' + item;
+                const rowCols = parseLine(item.rawLine).map(col => {
+                    const clean = col.trim().replace(/"/g, '');
+                    return '"' + clean + '"';
+                });
+                notFoundContent += '\n' + rowCols.join(',');
             });
+
+            // Remove leading newline if no header
+            notFoundContent = notFoundContent.trim();
 
             const BOM = '\uFEFF';
             const blob = new Blob([BOM + notFoundContent], { type: 'text/csv;charset=utf-8' });
